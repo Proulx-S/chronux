@@ -6,13 +6,13 @@ function [sv,sp,fm] = spsvd(data,params,mdkp)
 %       params      structure containing parameters - params has the
 %       following fields: tapers, Fs, fpass, pad
 %           tapers : precalculated tapers from dpss or in the one of the following
-%                    forms: 
+%                    forms:
 %                   (1) A numeric vector [TW K] where TW is the
 %                       time-bandwidth product and K is the number of
 %                       tapers to be used (less than or equal to
-%                       2TW-1). 
+%                       2TW-1).
 %                   (2) A numeric vector [W T p] where W is the
-%                       bandwidth, T is the duration of the data and p 
+%                       bandwidth, T is the duration of the data and p
 %                       is an integer such that 2TW-p tapers are used. In
 %                       this form there is no default i.e. to specify
 %                       the bandwidth, you have to specify T and p as
@@ -61,16 +61,32 @@ sp=sp+i*sp;
 fm=zeros(K,nf,mdkp);
 fm=fm+i*fm;
 sv=zeros(nf,min([K,NCHAN]));
-for j=1:nf 
-%     for k=1:K
-%       proj(:,k)=tapers(:,k).*exp(-f0*tvec');
-%     end
-    proj=tapers.*exp(-f(j)*tvec);
-    tmp=data'*proj; % projected data
-    [u,s,v]= svd(tmp,0); % svd 
-    for mk=1:mdkp, 
-      sp(:,j,mk)=u(:,mk)';
-      fm(:,j,mk)=v(:,mk)';
-    end  
-    sv(j,:)=diag(s);
-end;
+if nf>10
+    parfor j=1:nf
+        %     for k=1:K
+        %       proj(:,k)=tapers(:,k).*exp(-f0*tvec');
+        %     end
+        proj=tapers.*exp(-f(j)*tvec);
+        tmp=data'*proj; % projected data
+        [u,s,v]= svd(tmp,0); % svd
+        for mk=1:mdkp,
+            sp(:,j,mk)=u(:,mk)';
+            fm(:,j,mk)=v(:,mk)';
+        end
+        sv(j,:)=diag(s);
+    end
+else
+    for j=1:nf
+        %     for k=1:K
+        %       proj(:,k)=tapers(:,k).*exp(-f0*tvec');
+        %     end
+        proj=tapers.*exp(-f(j)*tvec);
+        tmp=data'*proj; % projected data
+        [u,s,v]= svd(tmp,0); % svd
+        for mk=1:mdkp,
+            sp(:,j,mk)=u(:,mk)';
+            fm(:,j,mk)=v(:,mk)';
+        end
+        sv(j,:)=diag(s);
+    end
+end
