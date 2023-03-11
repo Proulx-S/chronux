@@ -1,4 +1,8 @@
 function [sv,sp,fm] = spsvd(data,params,mdkp)
+% 2022-03-07: modified by Sebastien Proulx (jsproulx@mgh.harvard.edu) to
+% perform svd with the taper dimension augmented with frequency.
+% 
+% 
 % Space frequency SVD of input data - continuous processes
 % Usage: [sv,sp,fm] = spsvd(data,params,mdkp)
 % Inputs:
@@ -43,50 +47,105 @@ function [sv,sp,fm] = spsvd(data,params,mdkp)
 if nargin < 1; error('Need data'); end;
 if nargin < 2 || isempty(params); params=[]; end;
 [tapers,pad,Fs,fpass,err,trialave,params]=getparams(params);
+if isfield(params,'anaType')
+    anaType = params.anaType;
+end
 clear err trialave params
 [N,NCHAN]=size(data);
 tapers=dpsschk(tapers,N,Fs);
 nfft=max(2^(nextpow2(N)+pad),N);% number of points in fft
 [N,K]=size(tapers);
-if nargin<3 || isempty(mdkp); mdkp=min(K,NCHAN);
-elseif mdkp > min(K,NCHAN); error('mdkp has to be less than both K and NCHAN');end;
 
 tvec=1/Fs *(1:N)';
 tvec=repmat(tvec,[1 K]);
-tvec=tvec*2*pi*i;
+tvec=tvec*2*pi*1i;
 f=getfgrid(Fs,nfft,fpass);
 nf=length(f);
-sp=zeros(NCHAN,nf,mdkp);
-sp=sp+i*sp;
-fm=zeros(K,nf,mdkp);
-fm=fm+i*fm;
-sv=zeros(nf,min([K,NCHAN]));
-if nf>10
-    parfor j=1:nf
-        %     for k=1:K
-        %       proj(:,k)=tapers(:,k).*exp(-f0*tvec');
-        %     end
-        proj=tapers.*exp(-f(j)*tvec);
-        tmp=data'*proj; % projected data
-        [u,s,v]= svd(tmp,0); % svd
-        for mk=1:mdkp,
-            sp(:,j,mk)=u(:,mk)';
-            fm(:,j,mk)=v(:,mk)';
-        end
-        sv(j,:)=diag(s);
-    end
+if exist('anaType','var') && strcmp(anaType,'proulx')
+    if nargin<3 || isempty(mdkp); mdkp=min(K*nf,NCHAN);
+    elseif mdkp > min(K*nf,NCHAN); error('mdkp has to be less than both K and NCHAN');end;
+    
+%     sp=zeros(NCHAN,1,mdkp);
+%     sp=sp+1i*sp;
+%     fm=zeros(K,nf,mdkp);
+%     fm=fm+1i*fm;
+%     sv=zeros(1,mdkp);
+
+    proj = tapers.*exp(permute(-f,[1 3 2]).*tvec); % (time X taper X freq)
+    tmp=data'*proj(:,:); % projected data (chan X taper+freq)
+    [sp,sv,fm]= svd(tmp,0); % svd
+
+%     sv = diag(sv(1:mdkp,1:mdkp))';
+    sv = diag(sv)';
+    sp = permute(sp(:,1:mdkp),[1 3 2]);
+    fm = permute( reshape( permute(fm(:,1:mdkp),[2 1]) ,[mdkp K nf]) ,[2 3 1]);
+    
+%     figure('WindowStyle','docked');
+%     plot(s)
+% 
+%     % reduce
+%     kf = 25;
+%     u(:,kf+1:end) = [];
+%     s(:,kf+1:end) = [];
+%     v(:,kf+1:end) = [];
+% 
+%     u; % space X mode
+%     s; % mode
+%     v = permute(v,[2 1]);
+%     v = reshape(v,[kf K nf]); % mode X taper X freq
+%     v = squeeze(mean(v,2))'; % freq X mode
+%     
+% 
+%     figure('WindowStyle','docked');
+%     for kfInd = 1:size(v,1)
+%         y = squeeze(mean(abs(v(kfInd,:,:)),2)) + 0.02*kfInd;
+%         plot(f,y);
+%         text(0.5,mean(y(end-10:end)),num2str(kfInd))
+%         hold on
+%     end
+%     ax = gca;
+%     ax.XScale = 'log';
+% %     ax.YScale = 'log';
+%     grid on
+%     xlim([0.01 0.5])
+    
 else
-    for j=1:nf
-        %     for k=1:K
-        %       proj(:,k)=tapers(:,k).*exp(-f0*tvec');
-        %     end
-        proj=tapers.*exp(-f(j)*tvec);
-        tmp=data'*proj; % projected data
-        [u,s,v]= svd(tmp,0); % svd
-        for mk=1:mdkp,
-            sp(:,j,mk)=u(:,mk)';
-            fm(:,j,mk)=v(:,mk)';
+    if nargin<3 || isempty(mdkp); mdkp=min(K,NCHAN);
+    elseif mdkp > min(K,NCHAN); error('mdkp has to be less than both K and NCHAN');end;
+
+    sp=zeros(NCHAN,nf,mdkp);
+    sp=sp+1i*sp;
+    fm=zeros(K,nf,mdkp);
+    fm=fm+1i*fm;
+    sv=zeros(nf,min([K,NCHAN]));
+    % Original Mitra
+    if nf>10
+        parfor j=1:nf
+            %     for k=1:K
+            %       proj(:,k)=tapers(:,k).*exp(-f0*tvec');
+            %     end
+            proj=tapers.*exp(-f(j)*tvec);
+            tmp=data'*proj; % projected data
+            [u,s,v]= svd(tmp,0); % svd
+            for mk=1:mdkp,
+                sp(:,j,mk)=u(:,mk)';
+                fm(:,j,mk)=v(:,mk)';
+            end
+            sv(j,:)=diag(s);
         end
-        sv(j,:)=diag(s);
+    else
+        for j=1:nf
+            %     for k=1:K
+            %       proj(:,k)=tapers(:,k).*exp(-f0*tvec');
+            %     end
+            proj=tapers.*exp(-f(j)*tvec);
+            tmp=data'*proj; % projected data
+            [u,s,v]= svd(tmp,0); % svd
+            for mk=1:mdkp,
+                sp(:,j,mk)=u(:,mk)';
+                fm(:,j,mk)=v(:,mk)';
+            end
+            sv(j,:)=diag(s);
+        end
     end
 end
