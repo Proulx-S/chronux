@@ -45,11 +45,12 @@ function [S,f,Serr]=mtspectrumc(data,params)
 %               in the form frequency if trialave=1)
 %       f       (frequencies)
 %       Serr    (error bars) only for err(1)>=1
+%
 
 if nargin < 1; error('Need data'); end;
 if nargin < 2; params=[]; end;
 [tapers,pad,Fs,fpass,err,trialave,params]=getparams(params);
-if nargout > 2 && err(1)==0; 
+if nargout > 3 && err(1)==0; 
 %   Cannot compute error bars with err(1)=0. Change params and run again. 
     error('When Serr is desired, err(1) has to be non-zero.');
 end;
@@ -58,10 +59,12 @@ N=size(data,1);
 nfft=max(2^(nextpow2(N)+pad),N);
 [f,findx]=getfgrid(Fs,nfft,fpass); 
 tapers=dpsschk(tapers,N,Fs); % check tapers
-J=mtfftc(data,tapers,nfft,Fs);
+J=mtfftc(data,tapers,nfft,Fs); % [freq x taper x channel/trial]
 J=J(findx,:,:);
-S=permute(mean(conj(J).*J,2),[1 3 2]);
-if trialave; S=squeeze(mean(S,2));else S=squeeze(S);end;
+S=permute(mean(conj(J).*J,2),[1 3 2]); % average across tapers
+if trialave; S=squeeze(mean(S,2));else S=squeeze(S);end; % average across channels/trials
 if nargout==3; 
    Serr=specerr(S,J,err,trialave);
 end;
+
+

@@ -1,4 +1,6 @@
 function Serr=specerr(S,J,err,trialave,numsp)
+% Modified by Sebastien Proulx (2023) to fall-back to parfor for dim>10
+
 % Function to compute lower and upper confidence intervals on the spectrum 
 % Usage: Serr=specerr(S,J,err,trialave,numsp)
 % Outputs: Serr (Serr(1,...) - lower confidence level, Serr(2,...) upper confidence level)
@@ -46,12 +48,21 @@ if errchk==1;
    Serr(2,:,:)=dof(ones(nf,1),:).*S./Qq(ones(nf,1),:);
 elseif errchk==2;
    tcrit=tinv(pp,dim-1);
-   for k=1:dim;
-       indices=setdiff(1:dim,k);
-       Jjk=J(:,indices,:); % 1-drop projection
-       eJjk=squeeze(sum(Jjk.*conj(Jjk),2));
-       Sjk(k,:,:)=eJjk/(dim-1); % 1-drop spectrum
-   end;
+   if dim>10
+       parfor k=1:dim;
+           indices=setdiff(1:dim,k);
+           Jjk=J(:,indices,:); % 1-drop projection
+           eJjk=squeeze(sum(Jjk.*conj(Jjk),2));
+           Sjk(k,:,:)=eJjk/(dim-1); % 1-drop spectrum
+       end;
+   else
+       for k=1:dim;
+           indices=setdiff(1:dim,k);
+           Jjk=J(:,indices,:); % 1-drop projection
+           eJjk=squeeze(sum(Jjk.*conj(Jjk),2));
+           Sjk(k,:,:)=eJjk/(dim-1); % 1-drop spectrum
+       end;
+   end
    sigma=sqrt(dim-1)*squeeze(std(log(Sjk),1,1)); if C==1; sigma=sigma'; end; 
    conf=repmat(tcrit,nf,C).*sigma;
    conf=squeeze(conf); 
